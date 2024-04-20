@@ -9,7 +9,6 @@ DEFAULT_OPTIONS = {
     "rule": None,
     "options": None,
     "methods": ["GET"],
-    "hook": None,
 }
 INSTACE_TYPE = typing.Union[Quart, Blueprint]
 
@@ -27,24 +26,6 @@ def route(rule: str, **options: typing.Dict) -> typing.Callable:
             locals()["options"] = DEFAULT_OPTIONS
 
         func._classful = {"rule": rule, "options": options}
-        return func
-
-    return decorator
-
-
-def method(method: str):
-    """A decorator that registers a method
-    in a cached place, so it can be lazy-loaded.
-    """
-
-    def decorator(func) -> typing.Callable:
-        if hasattr(func, "_classful") is False:
-            setattr(func, "_classful", {})
-
-        options = DEFAULT_OPTIONS
-        options["method"] = method
-
-        func._classful = options
         return func
 
     return decorator
@@ -87,11 +68,7 @@ class QuartClassful:
     """
 
     routes: typing.List[typing.Tuple[str, typing.Callable]] = []
-    # is an rule, view_func tuple.
-
     cls_functions: typing.List[str] = ["register"]
-    before_request_prefix: str = "before_"
-    after_request_prefix: str = "after_"
 
     @staticmethod
     def get_intersting_members(
@@ -118,14 +95,26 @@ class QuartClassful:
         if hasattr(member, "_classful") is False:
             return
 
-        rule = member._classful.get("rule", None)
-        if rule is None:
-            rule = member.__name__.lower()
-            rule = rule.replace("_", "-")
-
+        rule = member._classful.get("rule")
         options = member._classful.get("options", {})
         methods = options.get("methods", ["GET"])
         instance.add_url_rule(rule, view_func=func, methods=methods)
+
+    def register_hook(
+        self, instance: "INSTACE_TYPE", member: typing.Callable, func: typing.Callable
+    ) -> None:
+        """Register a hook and its method."""
+
+        if hasattr(member, "_classful") is False:
+            return
+
+        if "hook" not in member._classful:
+            return
+
+        hook = member._classful.get("hook")
+        call_func = getattr(instance, hook, None)
+        if call_func is not None:
+            call_func(func)
 
     @classmethod
     def register(cls, instance: "INSTACE_TYPE", *args, **kwarg) -> None:
@@ -145,11 +134,8 @@ class QuartClassful:
             func.__name__ = member.__name__
 
             if hasattr(member, "_classful"):
+                args = (instance, member, func)
                 if "hook" in member._classful:
-                    hook = member._classful["hook"]
-                    call_func = getattr(instance, hook, None)
-                    if call_func is not None:
-                        call_func(func)
-
+                    self.register_hook(*args)
                 if "hook" not in member._classful:
-                    self.register_rule(instance, member, func)
+                    self.register_rule(*args)
