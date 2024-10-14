@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='quart_classful',
-    version='0.1f',
+    version='0.1',
     description='Class routers for flask!',
     author='Arty',
     author_email='artythedev@gmail.com',
